@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SermonCraft - Smart Quill Editor & Booklet Publisher</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Quill.js Theme & Stylesheet -->
+  <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
+  
+  <style>
+    /* Styling for Page Break visual separator inside the editor */
+    .page-break {
+      display: block;
+      margin: 1.5rem 0;
+      border-top: 2px dashed #6366f1;
+      position: relative;
+      text-align: center;
+    }
+    .page-break::after {
+      content: "--- PAGE BREAK ---";
+      position: absolute;
+      top: -0.75rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffff;
+      padding: 0 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #6366f1;
+      letter-spacing: 0.05em;
+    }
+
+    /* Customizing Quill Container */
+    #editor-container {
+      min-height: 420px;
+      font-size: 1rem;
+      background: #ffffff;
+    }
+    .ql-toolbar.ql-snow {
+      border-top-left-radius: 0.5rem;
+      border-top-right-radius: 0.5rem;
+      background-color: #f8fafc;
+      border-color: #cbd5e1;
+      flex-wrap: wrap;
+    }
+    .ql-container.ql-snow {
+      border-bottom-left-radius: 0.5rem;
+      border-bottom-right-radius: 0.5rem;
+      border-color: #cbd5e1;
+    }
+
+    /* Overlay Sidebar for Mobile Screens */
+    @media (max-width: 1024px) {
+      .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(15, 23, 42, 0.6);
+        z-index: 40;
+      }
+      .sidebar-drawer {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+      }
+      .sidebar-drawer.open {
+        transform: translateX(0);
+      }
+    }
+
+    /* Print styles for Booklet Mode */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #booklet-printable, #booklet-printable * {
+        visibility: visible;
+      }
+      #booklet-printable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      .page-break-print {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen">
+
+  <!-- ==================== 1. LANDING PAGE ==================== -->
+  <section id="landing-view" class="min-h-screen flex flex-col justify-between p-4 sm:p-8 max-w-6xl mx-auto">
+    <header class="flex justify-between items-center w-full">
+      <h1 class="text-2xl font-bold tracking-wide text-indigo-400">SermonCraft</h1>
+      <button onclick="login()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 sm:px-5 py-2 rounded-lg font-medium text-sm sm:text-base transition">
+        Sign In with Google
+      </button>
+    </header>
+
+    <main class="text-center max-w-3xl mx-auto my-12 sm:my-16 px-2">
+      <h2 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight text-white">
+        Craft & Publish Complete Sermons with Multiple Key Scriptures, Lyrics & Prayers
+      </h2>
+      <p class="text-slate-400 text-base sm:text-lg mb-8">
+        Full rich-text sermon drafting featuring unlimited key scripture tracking, live Bible API lookup at cursor, song lyrics, prayer points, academic references, speaker metadata, and booklet publishing.
+      </p>
+      <button onclick="login()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-semibold text-lg transition shadow-lg">
+        Get Started Free
+      </button>
+    </main>
+
+    <footer class="text-center text-slate-500 text-xs sm:text-sm">
+      &copy; SermonCraft. All rights reserved.
+    </footer>
+  </section>
+
+  <!-- ==================== 2. MAIN APP WORKSPACE ==================== -->
+  <div id="app-view" class="hidden flex h-screen bg-slate-100 text-slate-800 overflow-hidden relative">
+    
+    <!-- Mobile Backdrop Overlay -->
+    <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="hidden sidebar-overlay"></div>
+
+    <!-- Sidebar / User Sermons Dashboard -->
+    <aside id="sidebar-drawer" class="w-72 lg:w-80 bg-slate-900 text-white flex flex-col justify-between border-r border-slate-800 sidebar-drawer lg:static lg:transform-none h-full">
+      <div class="p-4 overflow-y-auto">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold text-indigo-400 cursor-pointer" onclick="showView('landing')">SermonCraft</h2>
+          <button onclick="createNewSermon()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded transition font-medium">
+            + New Sermon
+          </button>
+        </div>
+
+        <div class="flex justify-between items-center mb-2">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Saved Themes</p>
+          <button onclick="toggleSidebar(false)" class="lg:hidden text-slate-400 text-xs">✕ Close</button>
+        </div>
+        <div id="sermons-list" class="space-y-2">
+          <p class="text-slate-500 text-sm italic">Loading dashboard...</p>
+        </div>
+      </div>
+
+      <!-- User Profile Footer -->
+      <div class="p-4 border-t border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 overflow-hidden">
+          <div id="user-avatar" class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-white text-sm">U</div>
+          <span id="user-name" class="text-sm truncate text-slate-300">User</span>
+        </div>
+        <button onclick="logout()" class="text-xs text-slate-400 hover:text-white">Logout</button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      
+      <!-- Top Navigation Bar -->
+      <header class="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 flex justify-between items-center gap-2">
+        <div class="flex items-center gap-2">
+          <button onclick="toggleSidebar()" class="p-2 rounded-md text-slate-600 hover:bg-slate-100 focus:outline-none" title="Toggle Sidebar">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+
+          <div class="flex gap-1 sm:gap-2">
+            <button id="btn-editor-tab" onclick="switchTab('editor')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-900 text-white transition">
+              Editor
+            </button>
+            <button id="btn-booklet-tab" onclick="switchTab('booklet')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+              Booklet Preview
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-1.5 sm:gap-2">
+          <button id="btn-delete-current" onclick="deleteCurrentSermon()" class="hidden bg-rose-600 hover:bg-rose-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition">
+            Delete
+          </button>
+          <button onclick="printBooklet()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition hidden sm:block">
+            Print Booklet
+          </button>
+          <button id="btn-save" onclick="saveSermon()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium transition">
+            Publish & Save
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Content Workspace -->
+      <div class="flex-1 p-3 sm:p-6 overflow-y-auto">
+        
+        <!-- EDITOR TAB -->
+        <div id="tab-editor" class="max-w-4xl mx-auto bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4">
+          
+          <!-- Theme Title Input -->
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Theme (Main Title)</label>
+            <input 
+              type="text" 
+              id="sermon-theme" 
+              placeholder="e.g., Walking in Grace & Faith" 
+              class="w-full text-base sm:text-lg font-bold border border-slate-300 rounded-lg p-2 focus:outline-none focus:border-indigo-600"
+            />
+          </div>
+
+          <!-- Multiple Key Scriptures Dynamic Section -->
+          <div class="bg-indigo-50/60 p-3 sm:p-4 rounded-lg border border-indigo-100">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-xs font-semibold uppercase text-indigo-900">Key Scripture Passages</label>
+              <button onclick="addPassageField()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md font-bold transition">
+                + Add Scripture Passage
+              </button>
+            </div>
+            
+            <div id="passages-container" class="space-y-2">
+              <!-- Scripture inputs rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Speaker, Date, and Venue Metadata -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Speaker / Author</label>
+              <input 
+                type="text" 
+                id="sermon-speaker" 
+                placeholder="e.g., Pastor David" 
+                class="w-full text-sm border border-slate-300 rounded-md p-1.5 focus:outline-none focus:border-indigo-600 bg-white"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Date</label>
+              <input 
+                type="date" 
+                id="sermon-date" 
+                class="w-full text-sm border border-slate-300 rounded-md p-1.5 focus:outline-none focus:border-indigo-600 bg-white"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Venue / Church</label>
+              <input 
+                type="text" 
+                id="sermon-venue" 
+                placeholder="e.g., Main Sanctuary" 
+                class="w-full text-sm border border-slate-300 rounded-md p-1.5 focus:outline-none focus:border-indigo-600 bg-white"
+              />
+            </div>
+          </div>
+
+          <!-- Quick Content Block Injectors -->
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Insert Content Block at Cursor</span>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="insertBlock('story')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-emerald-300">
+                + Story Block
+              </button>
+              <button onclick="insertBlock('example')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-blue-300">
+                + Example Block
+              </button>
+              <button onclick="insertBlock('illustration')" class="bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-purple-300">
+                + Illustration Block
+              </button>
+              <button onclick="openSongModal()" class="bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-amber-300">
+                🎵 + Add Song Lyrics
+              </button>
+              <button onclick="openPrayerModal()" class="bg-rose-100 hover:bg-rose-200 text-rose-900 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-rose-300">
+                🙏 + Add Prayer Point
+              </button>
+              <button onclick="openRefModal()" class="bg-cyan-100 hover:bg-cyan-200 text-cyan-900 text-xs px-2.5 py-1.5 rounded-md font-semibold transition border border-cyan-300">
+                📚 + Add Reference / Citation
+              </button>
+            </div>
+          </div>
+
+          <!-- Quill Rich Text Editor Container -->
+          <div onclick="autoCloseSidebarOnMobile()">
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Sermon Body</label>
+            <div id="editor-container"></div>
+          </div>
+        </div>
+
+        <!-- BOOKLET PUBLISHED VIEW TAB -->
+        <div id="tab-booklet" class="hidden max-w-4xl mx-auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-slate-800">Published Booklet View</h3>
+            <button onclick="printBooklet()" class="sm:hidden bg-slate-800 text-white px-3 py-1 rounded text-xs">Print</button>
+          </div>
+
+          <!-- Printable Booklet Area -->
+          <div id="booklet-printable" class="bg-slate-300 p-4 sm:p-8 rounded-xl shadow-inner min-h-[600px]">
+            <div id="booklet-pages-container" class="space-y-6 sm:space-y-8">
+              <!-- Dynamically generated pages -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal for Live Scripture Fetching at Cursor -->
+  <div id="verse-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 text-slate-800">
+      <h3 class="text-lg font-bold text-slate-900 mb-1">Fetch Scripture at Cursor</h3>
+      <p class="text-xs text-slate-500 mb-4">Type a scripture reference (e.g., <span class="font-mono text-indigo-600">John 3:16</span> or <span class="font-mono text-indigo-600">Psalm 23:1-4</span>) to fetch instantly from Bible API.</p>
+      
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Scripture Reference</label>
+          <input type="text" id="verse-ref" placeholder="e.g., Romans 8:28" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Translation</label>
+          <select id="verse-translation" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600 bg-white">
+            <option value="kjv">King James Version (KJV)</option>
+            <option value="web">World English Bible (WEB)</option>
+            <option value="almeida">Almeida Bible</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeVerseModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancel</button>
+        <button id="btn-fetch-insert" onclick="fetchAndInsertScripture()" class="px-4 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 rounded-md flex items-center gap-1">
+          <span>Fetch & Insert</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Song Lyrics Insertion -->
+  <div id="song-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 text-slate-800">
+      <h3 class="text-lg font-bold text-slate-900 mb-1">🎵 Insert Song Lyrics</h3>
+      <p class="text-xs text-slate-500 mb-4">Add worship song or hymn lyrics at cursor position.</p>
+      
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Song Title / Artist</label>
+          <input type="text" id="song-title" placeholder="e.g., Amazing Grace - John Newton" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Lyrics</label>
+          <textarea id="song-lyrics" placeholder="Paste lyrics here..." class="w-full border border-slate-300 rounded-lg p-2 text-sm h-32 focus:outline-none focus:border-indigo-600 resize-none"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeSongModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancel</button>
+        <button onclick="insertSongLyrics()" class="px-4 py-2 text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 rounded-md">Insert Song</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Prayer Point Insertion with Scripture Fetch -->
+  <div id="prayer-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 text-slate-800">
+      <h3 class="text-lg font-bold text-slate-900 mb-1">🙏 Insert Prayer Point</h3>
+      <p class="text-xs text-slate-500 mb-4">Enter prayer focus and optionally auto-fetch supporting scripture.</p>
+      
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Prayer Title / Focus</label>
+          <input type="text" id="prayer-title" placeholder="e.g., Prayer for Healing & Restoration" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Prayer Direction / Request</label>
+          <textarea id="prayer-text" placeholder="Detail the specific prayer focus..." class="w-full border border-slate-300 rounded-lg p-2 text-sm h-20 focus:outline-none focus:border-indigo-600 resize-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Supporting Scripture Reference (Optional)</label>
+          <input type="text" id="prayer-scripture-ref" placeholder="e.g., Jeremiah 17:14" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closePrayerModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancel</button>
+        <button id="btn-insert-prayer" onclick="insertPrayerPoint()" class="px-4 py-2 text-sm font-medium bg-rose-600 text-white hover:bg-rose-500 rounded-md">Insert Prayer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Reference / Citation Insertion -->
+  <div id="ref-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 text-slate-800">
+      <h3 class="text-lg font-bold text-slate-900 mb-1">📚 Insert Reference / Citation</h3>
+      <p class="text-xs text-slate-500 mb-4">Cite a book, scholar, commentary, or historical resource at cursor.</p>
+      
+      <div class="space-y-3 mb-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Author / Scholar</label>
+          <input type="text" id="ref-author" placeholder="e.g., C.S. Lewis or Charles Spurgeon" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Source / Book Title</label>
+          <input type="text" id="ref-source" placeholder="e.g., Mere Christianity, Chapter 3" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:outline-none focus:border-indigo-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Quote or Key Insight</label>
+          <textarea id="ref-quote" placeholder="Enter quote or key historical point..." class="w-full border border-slate-300 rounded-lg p-2 text-sm h-24 focus:outline-none focus:border-indigo-600 resize-none"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeRefModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md">Cancel</button>
+        <button onclick="insertReference()" class="px-4 py-2 text-sm font-medium bg-cyan-700 text-white hover:bg-cyan-600 rounded-md">Insert Reference</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quill.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+
+  <!-- Firebase v10 JavaScript SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Replace with your real Firebase Web Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCrluPUsfacEkvkXvcLYx_8jf6Oxv2uCwU",
+      authDomain: "sermon-bfea8.firebaseapp.com",
+      projectId: "sermon-bfea8",
+      storageBucket: "sermon-bfea8.firebasestorage.app",
+      messagingSenderId: "194767624889",
+      appId: "1:194767624889:web:65356a7798e314ab0ad968",
+      measurementId: "G-KLL6VQYTME"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let currentUser = null;
+    let currentSermonId = null;
+    let sermonsData = [];
+    let unsubscribeSermons = null;
+    let quill = null;
+
+    // --- Quill Custom Page Break Blot ---
+    const BlockEmbed = Quill.import('blots/block/embed');
+    
+    class PageBreakBlot extends BlockEmbed {
+      static create() {
+        let node = super.create();
+        node.setAttribute('class', 'page-break');
+        node.setAttribute('contenteditable', 'false');
+        return node;
+      }
+    }
+    PageBreakBlot.blotName = 'pageBreak';
+    PageBreakBlot.tagName = 'div';
+    Quill.register(PageBreakBlot);
+
+    // --- Initialize Quill Editor ---
+    document.addEventListener("DOMContentLoaded", () => {
+      quill = new Quill('#editor-container', {
+        theme: 'snow',
+        modules: {
+          history: {
+            delay: 1000,
+            maxStack: 100,
+            userOnly: true
+          },
+          toolbar: {
+            container: [
+              [{ 'header': [1, 2, 3, false] }],
+              ['bold', 'italic', 'underline', 'blockquote'],
+              [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+              [{ 'align': [] }],
+              ['clean']
+            ]
+          }
+        },
+        placeholder: 'Compose your sermon manuscript...'
+      });
+
+      // Custom Toolbar Actions
+      const toolbar = quill.getModule('toolbar').container;
+      const customGroup = document.createElement('span');
+      customGroup.className = 'ql-formats border-l border-slate-300 pl-2 ml-2 flex items-center gap-1 flex-wrap';
+
+      customGroup.innerHTML = `
+        <button type="button" id="btn-undo" class="!w-auto !px-1.5 text-xs font-semibold" title="Undo">↩ Undo</button>
+        <button type="button" id="btn-redo" class="!w-auto !px-1.5 text-xs font-semibold" title="Redo">↪ Redo</button>
+        <button type="button" id="btn-verse" class="!w-auto !px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-xs font-bold" title="Fetch Scripture at Cursor">📖 Fetch Verse</button>
+        <button type="button" id="btn-nextpage" class="!w-auto !px-2 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded text-xs font-bold" title="Insert Page Break">📄 Page Break</button>
+      `;
+
+      toolbar.appendChild(customGroup);
+
+      document.getElementById('btn-undo').addEventListener('click', () => quill.history.undo());
+      document.getElementById('btn-redo').addEventListener('click', () => quill.history.redo());
+      document.getElementById('btn-verse').addEventListener('click', openVerseModal);
+      document.getElementById('btn-nextpage').addEventListener('click', insertPageBreak);
+
+      // Initialize with one default passage field
+      addPassageField();
+    });
+
+    // --- Dynamic Key Scriptures Handlers ---
+    window.addPassageField = (initialValue = "") => {
+      const container = document.getElementById('passages-container');
+      const passageId = 'passage-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+
+      const div = document.createElement('div');
+      div.id = passageId;
+      div.className = "flex items-center gap-2";
+
+      div.innerHTML = `
+        <input 
+          type="text" 
+          value="${escapeHtml(initialValue)}" 
+          placeholder="e.g., Ephesians 2:8-10 or John 3:16" 
+          class="passage-input flex-1 text-sm font-medium border border-slate-300 rounded-lg p-2 focus:outline-none focus:border-indigo-600 bg-white"
+        />
+        <button onclick="fetchPassageToEditor('${passageId}')" class="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-bold px-3 py-2 rounded-lg border border-indigo-300 transition whitespace-nowrap">
+          ⚡ Fetch Text
+        </button>
+        <button onclick="removePassageField('${passageId}')" class="text-xs bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold px-2.5 py-2 rounded-lg border border-rose-300 transition">
+          ✕
+        </button>
+      `;
+
+      container.appendChild(div);
+    };
+
+    window.removePassageField = (passageId) => {
+      const container = document.getElementById('passages-container');
+      const el = document.getElementById(passageId);
+      if (el && container.children.length > 1) {
+        el.remove();
+      } else if (el) {
+        // Clear input if it's the last remaining row
+        el.querySelector('input').value = "";
+      }
+    };
+
+    function getKeyPassagesArray() {
+      const inputs = document.querySelectorAll('.passage-input');
+      const passages = [];
+      inputs.forEach(input => {
+        const val = input.value.trim();
+        if (val) passages.push(val);
+      });
+      return passages;
+    }
+
+    function setKeyPassagesArray(passagesArray = []) {
+      const container = document.getElementById('passages-container');
+      container.innerHTML = "";
+      if (!passagesArray || passagesArray.length === 0) {
+        addPassageField();
+      } else {
+        passagesArray.forEach(p => addPassageField(p));
+      }
+    }
+
+    window.fetchPassageToEditor = async (passageId) => {
+      const row = document.getElementById(passageId);
+      if (!row) return;
+
+      const input = row.querySelector('input');
+      const ref = input.value.trim();
+      if (!ref) return;
+
+      const data = await fetchScriptureText(ref);
+      if (data) {
+        input.value = `${data.reference} (${data.translation})`;
+        const range = quill.getSelection(true) || { index: 0 };
+        quill.insertText(range.index, `\nKEY SCRIPTURE: ${data.reference}\n“${data.text}”\n\n`, {
+          bold: true,
+          italic: true,
+          blockquote: true
+        });
+      } else {
+        alert("Scripture lookup failed. Please check the reference format.");
+      }
+    };
+
+    // --- Auth Listener ---
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      if (user) {
+        document.getElementById('user-name').innerText = user.displayName || "Pastor";
+        document.getElementById('user-avatar').innerText = (user.displayName || "P")[0];
+        showView('app');
+        listenToSermons(user.uid);
+      } else {
+        if (unsubscribeSermons) unsubscribeSermons();
+        showView('landing');
+      }
+    });
+
+    window.login = () => signInWithPopup(auth, new GoogleAuthProvider());
+    window.logout = () => signOut(auth);
+
+    // --- Responsive Sidebar Toggle ---
+    window.toggleSidebar = (forceState) => {
+      const drawer = document.getElementById('sidebar-drawer');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      
+      const isOpen = drawer.classList.contains('open');
+      const shouldOpen = forceState !== undefined ? forceState : !isOpen;
+
+      if (shouldOpen) {
+        drawer.classList.add('open');
+        backdrop.classList.remove('hidden');
+      } else {
+        drawer.classList.remove('open');
+        backdrop.classList.add('hidden');
+      }
+    };
+
+    window.autoCloseSidebarOnMobile = () => {
+      if (window.innerWidth < 1024) {
+        toggleSidebar(false);
+      }
+    };
+
+    // --- Navigation Views ---
+    window.showView = (viewName) => {
+      const landing = document.getElementById('landing-view');
+      const appView = document.getElementById('app-view');
+      if (viewName === 'landing') {
+        landing.classList.remove('hidden');
+        appView.classList.add('hidden');
+      } else {
+        landing.classList.add('hidden');
+        appView.classList.remove('hidden');
+      }
+    };
+
+    window.switchTab = (tabName) => {
+      const editorTab = document.getElementById('tab-editor');
+      const bookletTab = document.getElementById('tab-booklet');
+      const btnEditor = document.getElementById('btn-editor-tab');
+      const btnBooklet = document.getElementById('btn-booklet-tab');
+
+      if (tabName === 'editor') {
+        editorTab.classList.remove('hidden');
+        bookletTab.classList.add('hidden');
+        btnEditor.className = "px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-900 text-white transition";
+        btnBooklet.className = "px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition";
+      } else {
+        editorTab.classList.add('hidden');
+        bookletTab.classList.remove('hidden');
+        btnBooklet.className = "px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-900 text-white transition";
+        btnEditor.className = "px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition";
+        renderBooklet();
+      }
+    };
+
+    // --- Bible API Fetcher Logic ---
+    async function fetchScriptureText(reference, translation = 'kjv') {
+      try {
+        const response = await fetch(`https://bible-api.com/${encodeURIComponent(reference)}?translation=${translation}`);
+        if (!response.ok) throw new Error("Scripture reference not found");
+        const data = await response.json();
+        return {
+          reference: data.reference,
+          text: data.text.trim(),
+          translation: translation.toUpperCase()
+        };
+      } catch (err) {
+        console.error("Bible API Fetch Error:", err);
+        return null;
+      }
+    }
+
+    window.openVerseModal = () => {
+      document.getElementById('verse-modal').classList.remove('hidden');
+      document.getElementById('verse-ref').value = "";
+    };
+
+    window.closeVerseModal = () => {
+      document.getElementById('verse-modal').classList.add('hidden');
+    };
+
+    window.fetchAndInsertScripture = async () => {
+      const ref = document.getElementById('verse-ref').value.trim();
+      const translation = document.getElementById('verse-translation').value;
+      const btn = document.getElementById('btn-fetch-insert');
+
+      if (!ref) return;
+
+      btn.disabled = true;
+      btn.innerText = "Fetching...";
+
+      const scriptureData = await fetchScriptureText(ref, translation);
+
+      btn.disabled = false;
+      btn.innerText = "Fetch & Insert";
+
+      if (!scriptureData) {
+        alert("Could not fetch verse. Please check reference format (e.g., John 3:16).");
+        return;
+      }
+
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+
+      quill.insertText(range.index, `“${scriptureData.text}”\n— ${scriptureData.reference} (${scriptureData.translation})\n`, {
+        blockquote: true,
+        italic: true
+      });
+
+      closeVerseModal();
+    };
+
+    // --- Song Lyrics Injector Modal Handlers ---
+    window.openSongModal = () => {
+      document.getElementById('song-modal').classList.remove('hidden');
+      document.getElementById('song-title').value = "";
+      document.getElementById('song-lyrics').value = "";
+    };
+
+    window.closeSongModal = () => {
+      document.getElementById('song-modal').classList.add('hidden');
+    };
+
+    window.insertSongLyrics = () => {
+      const title = document.getElementById('song-title').value.trim();
+      const lyrics = document.getElementById('song-lyrics').value.trim();
+
+      if (!title || !lyrics) return;
+
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+
+      quill.insertText(range.index, `\n🎵 WORSHIP SONG: ${title}\n`, { bold: true, header: 3 });
+      quill.insertText(range.index + title.length + 18, `${lyrics}\n\n`, { italic: true, blockquote: true });
+
+      closeSongModal();
+    };
+
+    // --- Prayer Point Injector Modal Handlers ---
+    window.openPrayerModal = () => {
+      document.getElementById('prayer-modal').classList.remove('hidden');
+      document.getElementById('prayer-title').value = "";
+      document.getElementById('prayer-text').value = "";
+      document.getElementById('prayer-scripture-ref').value = "";
+    };
+
+    window.closePrayerModal = () => {
+      document.getElementById('prayer-modal').classList.add('hidden');
+    };
+
+    window.insertPrayerPoint = async () => {
+      const title = document.getElementById('prayer-title').value.trim();
+      const text = document.getElementById('prayer-text').value.trim();
+      const scriptureRef = document.getElementById('prayer-scripture-ref').value.trim();
+      const btn = document.getElementById('btn-insert-prayer');
+
+      if (!title) return;
+
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+
+      btn.disabled = true;
+      btn.innerText = "Inserting...";
+
+      quill.insertText(range.index, `\n🙏 PRAYER POINT: ${title}\n`, { bold: true, header: 3 });
+      let currentPos = range.index + title.length + 18;
+
+      if (scriptureRef) {
+        const scriptureData = await fetchScriptureText(scriptureRef);
+        if (scriptureData) {
+          quill.insertText(currentPos, `Scripture Anchor: ${scriptureData.reference}\n“${scriptureData.text}”\n`, { blockquote: true, italic: true });
+          currentPos += scriptureData.reference.length + scriptureData.text.length + 23;
+        }
+      }
+
+      if (text) {
+        quill.insertText(currentPos, `Prayer Focus: ${text}\n\n`);
+      } else {
+        quill.insertText(currentPos, `\n`);
+      }
+
+      btn.disabled = false;
+      btn.innerText = "Insert Prayer";
+      closePrayerModal();
+    };
+
+    // --- Reference / Citation Modal Handlers ---
+    window.openRefModal = () => {
+      document.getElementById('ref-modal').classList.remove('hidden');
+      document.getElementById('ref-author').value = "";
+      document.getElementById('ref-source').value = "";
+      document.getElementById('ref-quote').value = "";
+    };
+
+    window.closeRefModal = () => {
+      document.getElementById('ref-modal').classList.add('hidden');
+    };
+
+    window.insertReference = () => {
+      const author = document.getElementById('ref-author').value.trim();
+      const source = document.getElementById('ref-source').value.trim();
+      const quote = document.getElementById('ref-quote').value.trim();
+
+      if (!author && !source && !quote) return;
+
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+      let headerStr = "📚 REFERENCE / CITATION";
+      if (author || source) {
+        headerStr += `: ${author}${author && source ? ' - ' : ''}${source}`;
+      }
+
+      quill.insertText(range.index, `\n[ ${headerStr} ]\n`, { bold: true, header: 3 });
+      let nextPos = range.index + headerStr.length + 5;
+
+      if (quote) {
+        quill.insertText(nextPos, `“${quote}”\n\n`, { blockquote: true, italic: true });
+      } else {
+        quill.insertText(nextPos, `\n`);
+      }
+
+      closeRefModal();
+    };
+
+    // --- Story, Example, and Illustration Block Injectors ---
+    window.insertBlock = (type) => {
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+      
+      let title = "";
+      let placeholderText = "";
+
+      if (type === 'story') {
+        title = "📖 STORY / ANECDOTE";
+        placeholderText = "Type or describe the illustrative story here...";
+      } else if (type === 'example') {
+        title = "💡 PRACTICAL EXAMPLE";
+        placeholderText = "Provide a real-world application or example...";
+      } else if (type === 'illustration') {
+        title = "🎨 VISUAL ILLUSTRATION";
+        placeholderText = "Detail the visual metaphor or lesson object...";
+      }
+
+      quill.insertText(range.index, `\n[ ${title} ]\n`, { bold: true, header: 3 });
+      
+      const attachVerse = confirm(`Do you want to fetch and attach a scripture reference inside this ${type} block?`);
+      
+      if (attachVerse) {
+        const verseRef = prompt("Enter scripture reference (e.g. Matthew 5:14):");
+        if (verseRef) {
+          fetchScriptureText(verseRef).then(data => {
+            if (data) {
+              quill.insertText(range.index + title.length + 5, `Scripture Reference: ${data.reference}\n“${data.text}”\n${placeholderText}\n\n`, { blockquote: true });
+            } else {
+              quill.insertText(range.index + title.length + 5, `${placeholderText}\n\n`);
+            }
+          });
+          return;
+        }
+      }
+
+      quill.insertText(range.index + title.length + 5, `${placeholderText}\n\n`);
+    };
+
+    // --- Next Page / Page Break Embed ---
+    function insertPageBreak() {
+      const range = quill.getSelection(true) || { index: quill.getLength() };
+      quill.insertEmbed(range.index, 'pageBreak', true, Quill.sources.USER);
+      quill.setSelection(range.index + 1, Quill.sources.SILENT);
+    }
+
+    // --- Firestore Sync Handlers ---
+    function listenToSermons(uid) {
+      const q = query(
+        collection(db, "users", uid, "sermons"), 
+        orderBy("updatedAt", "desc")
+      );
+
+      unsubscribeSermons = onSnapshot(q, (snapshot) => {
+        sermonsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderSermonsList();
+      });
+    }
+
+    function renderSermonsList() {
+      const listEl = document.getElementById('sermons-list');
+      if (sermonsData.length === 0) {
+        listEl.innerHTML = `<p class="text-slate-500 text-sm italic">No saved sermon themes.</p>`;
+        return;
+      }
+
+      listEl.innerHTML = sermonsData.map(sermon => {
+        const passagesStr = Array.isArray(sermon.passages) ? sermon.passages.join(', ') : (sermon.passage || "No Passages");
+        const isSelected = currentSermonId === sermon.id;
+        return `
+          <div 
+            class="p-3 rounded-lg flex justify-between items-center transition group ${isSelected ? 'bg-indigo-600' : 'bg-slate-800 hover:bg-slate-700'}"
+          >
+            <div onclick="selectSermon('${sermon.id}')" class="cursor-pointer flex-1 min-w-0 pr-2">
+              <p class="font-bold text-sm truncate text-white">${escapeHtml(sermon.theme || "Untitled Theme")}</p>
+              <p class="text-xs text-indigo-200 truncate mt-0.5">${escapeHtml(sermon.speaker ? 'By ' + sermon.speaker : passagesStr)}</p>
+            </div>
+            <div class="flex items-center gap-1">
+              <button 
+                onclick="selectSermon('${sermon.id}')" 
+                class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600"
+                title="Edit Sermon"
+              >
+                ✏️
+              </button>
+              <button 
+                onclick="confirmDeleteSermon(event, '${sermon.id}', '${escapeHtml(sermon.theme || "Untitled Theme")}')" 
+                class="text-xs bg-rose-900/50 hover:bg-rose-800 text-rose-200 px-2 py-1 rounded border border-rose-700"
+                title="Delete Sermon"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateDeleteButtonVisibility() {
+      const btnDelete = document.getElementById('btn-delete-current');
+      if (currentSermonId) {
+        btnDelete.classList.remove('hidden');
+      } else {
+        btnDelete.classList.add('hidden');
+      }
+    }
+
+    window.createNewSermon = () => {
+      currentSermonId = null;
+      document.getElementById('sermon-theme').value = "";
+      setKeyPassagesArray([]);
+      document.getElementById('sermon-speaker').value = "";
+      document.getElementById('sermon-date').value = "";
+      document.getElementById('sermon-venue').value = "";
+      quill.setText("");
+      updateDeleteButtonVisibility();
+      renderSermonsList();
+      switchTab('editor');
+      autoCloseSidebarOnMobile();
+    };
+
+    window.selectSermon = (id) => {
+      const sermon = sermonsData.find(s => s.id === id);
+      if (!sermon) return;
+
+      currentSermonId = sermon.id;
+      document.getElementById('sermon-theme').value = sermon.theme || "";
+      
+      const passages = Array.isArray(sermon.passages) 
+        ? sermon.passages 
+        : (sermon.passage ? [sermon.passage] : []);
+      setKeyPassagesArray(passages);
+
+      document.getElementById('sermon-speaker').value = sermon.speaker || "";
+      document.getElementById('sermon-date').value = sermon.date || "";
+      document.getElementById('sermon-venue').value = sermon.venue || "";
+      
+      if (sermon.contentHtml) {
+        quill.clipboard.dangerouslyPasteHTML(sermon.contentHtml);
+      } else {
+        quill.setText(sermon.contentText || "");
+      }
+
+      updateDeleteButtonVisibility();
+      renderSermonsList();
+      switchTab('editor');
+      autoCloseSidebarOnMobile();
+    };
+
+    window.saveSermon = async () => {
+      if (!currentUser) return;
+      
+      const theme = document.getElementById('sermon-theme').value.trim();
+      const passages = getKeyPassagesArray();
+      const speaker = document.getElementById('sermon-speaker').value.trim();
+      const date = document.getElementById('sermon-date').value;
+      const venue = document.getElementById('sermon-venue').value.trim();
+      
+      const contentHtml = quill.getSemanticHTML();
+      const contentText = quill.getText();
+
+      if (!theme && !contentText.trim()) return;
+
+      const btnSave = document.getElementById('btn-save');
+      btnSave.innerText = "Saving...";
+      btnSave.disabled = true;
+
+      try {
+        const sermonPayload = {
+          theme: theme || "Untitled Theme",
+          passages: passages,
+          speaker: speaker || "",
+          date: date || "",
+          venue: venue || "",
+          contentHtml: contentHtml,
+          contentText: contentText,
+          updatedAt: serverTimestamp()
+        };
+
+        if (currentSermonId) {
+          const docRef = doc(db, "users", currentUser.uid, "sermons", currentSermonId);
+          await updateDoc(docRef, sermonPayload);
+        } else {
+          sermonPayload.createdAt = serverTimestamp();
+          const docRef = await addDoc(collection(db, "users", currentUser.uid, "sermons"), sermonPayload);
+          currentSermonId = docRef.id;
+        }
+        updateDeleteButtonVisibility();
+      } catch (err) {
+        console.error("Firestore Publish Error:", err);
+      } finally {
+        btnSave.innerText = "Publish & Save";
+        btnSave.disabled = false;
+      }
+    };
+
+    window.deleteCurrentSermon = async () => {
+      if (!currentSermonId || !currentUser) return;
+      const theme = document.getElementById('sermon-theme').value || "this sermon";
+      if (confirm(`Are you sure you want to delete "${theme}"? This action cannot be undone.`)) {
+        try {
+          await deleteDoc(doc(db, "users", currentUser.uid, "sermons", currentSermonId));
+          createNewSermon();
+        } catch (err) {
+          console.error("Error deleting sermon:", err);
+          alert("Failed to delete sermon.");
+        }
+      }
+    };
+
+    window.confirmDeleteSermon = async (e, id, themeTitle) => {
+      e.stopPropagation();
+      if (!currentUser) return;
+      if (confirm(`Are you sure you want to delete "${themeTitle}"?`)) {
+        try {
+          await deleteDoc(doc(db, "users", currentUser.uid, "sermons", id));
+          if (currentSermonId === id) {
+            createNewSermon();
+          }
+        } catch (err) {
+          console.error("Error deleting sermon:", err);
+          alert("Failed to delete sermon.");
+        }
+      }
+    };
+
+    // --- Render Published Booklet View ---
+    function renderBooklet() {
+      const theme = document.getElementById('sermon-theme').value || "Untitled Theme";
+      const passages = getKeyPassagesArray();
+      const speaker = document.getElementById('sermon-speaker').value || "";
+      const date = document.getElementById('sermon-date').value || "";
+      const venue = document.getElementById('sermon-venue').value || "";
+
+      const htmlContent = quill.getSemanticHTML();
+      const pagesContainer = document.getElementById('booklet-pages-container');
+      pagesContainer.innerHTML = "";
+
+      const pageSections = htmlContent.split(/<div class="page-break"[^>]*><\/div>/gi);
+
+      pageSections.forEach((sectionHtml, index) => {
+        const pageNum = index + 1;
+        const pageDiv = document.createElement('div');
+        pageDiv.className = "bg-amber-50 p-6 sm:p-8 rounded-lg shadow-md border border-amber-200 flex flex-col justify-between text-slate-900 min-h-[500px] sm:min-h-[550px] page-break-print";
+
+        pageDiv.innerHTML = `
+          <div>
+            ${pageNum === 1 ? `
+              <div class="border-b-2 border-amber-300 pb-4 mb-6">
+                <span class="text-xs font-bold tracking-widest text-indigo-700 uppercase">Sermon Booklet</span>
+                <h1 class="text-2xl sm:text-3xl font-serif font-bold text-slate-900 mt-1">${escapeHtml(theme)}</h1>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 pt-3 border-t border-amber-200/60 text-xs font-serif text-amber-900">
+                  ${speaker ? `<p><strong>Speaker:</strong> ${escapeHtml(speaker)}</p>` : ''}
+                  ${date ? `<p><strong>Date:</strong> ${escapeHtml(date)}</p>` : ''}
+                  ${venue ? `<p><strong>Venue:</strong> ${escapeHtml(venue)}</p>` : ''}
+                  ${passages.length > 0 ? `
+                    <div class="sm:col-span-2 mt-1">
+                      <strong>Key Scripture(s):</strong>
+                      <ul class="list-disc list-inside mt-0.5 space-y-0.5">
+                        ${passages.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
+                      </ul>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            ` : `
+              <div class="border-b border-amber-200 pb-2 mb-4 flex justify-between items-center text-xs text-amber-800 font-serif">
+                <span>${escapeHtml(theme)} ${speaker ? '— ' + escapeHtml(speaker) : ''}</span>
+                <span>Page ${pageNum}</span>
+              </div>
+            `}
+            <div class="prose prose-amber font-serif text-slate-800 text-xs sm:text-sm leading-relaxed">
+              ${sectionHtml || "<p class='italic text-slate-400'>No content on this page.</p>"}
+            </div>
+          </div>
+          <div class="text-center text-xs text-amber-700 font-serif border-t border-amber-200 pt-3 mt-6">
+            Page ${pageNum} of ${pageSections.length}
+          </div>
+        `;
+
+        pagesContainer.appendChild(pageDiv);
+      });
+    }
+
+    window.printBooklet = () => {
+      switchTab('booklet');
+      setTimeout(() => window.print(), 300);
+    };
+
+    function escapeHtml(str) {
+      return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>
