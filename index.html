@@ -39,18 +39,25 @@
       min-height: 420px;
       font-size: 1rem;
       background: #ffffff;
-    }
-    .ql-toolbar.ql-snow {
-      border-top-left-radius: 0.5rem;
-      border-top-right-radius: 0.5rem;
-      background-color: #f8fafc;
-      border-color: #cbd5e1;
-      flex-wrap: wrap;
-    }
-    .ql-container.ql-snow {
       border-bottom-left-radius: 0.5rem;
       border-bottom-right-radius: 0.5rem;
-      border-color: #cbd5e1;
+      border: 1px solid #cbd5e1;
+      border-top: none;
+    }
+    
+    /* Hide default snow toolbar since we are using a dynamic cursor-following floating toolbar */
+    .ql-toolbar.ql-snow {
+      display: none !important;
+    }
+
+    /* Compact Vertical Floating Cursor Toolbar */
+    #floating-toolbar {
+      position: absolute;
+      display: none;
+      z-index: 50;
+      transition: top 0.08s ease, left 0.08s ease;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
     }
 
     /* Overlay Sidebar for Mobile Screens */
@@ -111,7 +118,7 @@
         Craft & Publish Complete Sermons with Multiple Key Scriptures, Lyrics & Prayers
       </h2>
       <p class="text-slate-400 text-base sm:text-lg mb-8">
-        Full rich-text sermon drafting featuring unlimited key scripture tracking, live Bible API lookup at cursor, song lyrics, prayer points, academic references, speaker metadata, and booklet publishing.
+        Full rich-text sermon drafting featuring click-to-show vertical cursor toolbar, live Bible API lookup, song lyrics, prayer points, illustrations, and interactive booklet publishing.
       </p>
       <button onclick="login()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-semibold text-lg transition shadow-lg">
         Get Started Free
@@ -192,8 +199,51 @@
       </header>
 
       <!-- Dynamic Content Workspace -->
-      <div class="flex-1 p-3 sm:p-6 overflow-y-auto">
+      <div id="editor-workspace-area" class="flex-1 p-3 sm:p-6 overflow-y-auto relative">
         
+        <!-- COMPACT VERTICAL FLOATING CURSOR TOOLBAR -->
+        <div id="floating-toolbar" class="bg-slate-900/95 text-white p-1.5 rounded-xl flex flex-col gap-1 border border-slate-700 text-xs font-medium w-44 shadow-2xl">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 px-1.5 pt-0.5 font-bold border-b border-slate-800 pb-1 flex justify-between items-center">
+            <span>Quick Toolbar</span>
+            <span class="text-indigo-400">⚡ At Cursor</span>
+          </div>
+
+          <!-- Text Style Group -->
+          <div class="grid grid-cols-4 gap-1">
+            <button type="button" onclick="formatText('bold')" class="py-1 bg-slate-800 hover:bg-slate-700 rounded font-bold text-center" title="Bold">B</button>
+            <button type="button" onclick="formatText('italic')" class="py-1 bg-slate-800 hover:bg-slate-700 rounded italic text-center" title="Italic">I</button>
+            <button type="button" onclick="formatText('underline')" class="py-1 bg-slate-800 hover:bg-slate-700 rounded underline text-center" title="Underline">U</button>
+            <button type="button" onclick="formatHeader(1)" class="py-1 bg-slate-800 hover:bg-slate-700 rounded font-bold text-[10px] text-center" title="Heading">H1</button>
+          </div>
+
+          <!-- Lists & Structure Group -->
+          <div class="grid grid-cols-2 gap-1">
+            <button type="button" onclick="formatList('bullet')" class="py-1 px-1.5 bg-slate-800 hover:bg-slate-700 rounded text-left truncate" title="Bullet List">• Bullet</button>
+            <button type="button" onclick="formatList('ordered')" class="py-1 px-1.5 bg-slate-800 hover:bg-slate-700 rounded text-left truncate" title="Numbered List">1. Number</button>
+          </div>
+
+          <div class="h-px bg-slate-800 my-0.5"></div>
+
+          <!-- Sermon Actions Group -->
+          <div class="flex flex-col gap-1">
+            <button type="button" onclick="openVerseModal()" class="w-full py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white font-bold text-left flex items-center gap-1.5" title="Fetch Scripture at Cursor">
+              <span>📖</span> Fetch Verse
+            </button>
+            <button type="button" onclick="insertPageBreak()" class="w-full py-1 px-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 text-left flex items-center gap-1.5" title="Insert Page Break">
+              <span>📄</span> Next Page Break
+            </button>
+            <button type="button" onclick="openPrayerModal()" class="w-full py-1 px-2 bg-rose-950/80 hover:bg-rose-900 text-rose-200 rounded text-left flex items-center gap-1.5" title="Insert Prayer Point">
+              <span>🙏</span> Prayer Point
+            </button>
+            <button type="button" onclick="insertBlock('story')" class="w-full py-1 px-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 rounded text-left flex items-center gap-1.5" title="Insert Story Block">
+              <span>📖</span> Story / Anecdote
+            </button>
+            <button type="button" onclick="insertBlock('illustration')" class="w-full py-1 px-2 bg-purple-950/80 hover:bg-purple-900 text-purple-200 rounded text-left flex items-center gap-1.5" title="Insert Illustration">
+              <span>🎨</span> Illustration
+            </button>
+          </div>
+        </div>
+
         <!-- EDITOR TAB -->
         <div id="tab-editor" class="max-w-4xl mx-auto bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-4">
           
@@ -287,12 +337,15 @@
         <!-- BOOKLET PUBLISHED VIEW TAB -->
         <div id="tab-booklet" class="hidden max-w-4xl mx-auto">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-bold text-slate-800">Published Booklet View</h3>
-            <button onclick="printBooklet()" class="sm:hidden bg-slate-800 text-white px-3 py-1 rounded text-xs">Print</button>
+            <div>
+              <h3 class="text-xl font-bold text-slate-800">Published Booklet View</h3>
+              <p class="text-xs text-slate-500">Tap anywhere on the booklet page below to flip to the next page.</p>
+            </div>
+            <button onclick="printBooklet()" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Print Booklet</button>
           </div>
 
           <!-- Printable Booklet Area -->
-          <div id="booklet-printable" class="bg-slate-300 p-4 sm:p-8 rounded-xl shadow-inner min-h-[600px]">
+          <div id="booklet-printable" class="bg-slate-300 p-4 sm:p-8 rounded-xl shadow-inner min-h-[600px] cursor-pointer" onclick="handleBookletTap(event)" title="Tap anywhere to go to next page">
             <div id="booklet-pages-container" class="space-y-6 sm:space-y-8">
               <!-- Dynamically generated pages -->
             </div>
@@ -446,6 +499,8 @@
     let sermonsData = [];
     let unsubscribeSermons = null;
     let quill = null;
+    let isTyping = false;
+    let typingTimer = null;
 
     // --- Quill Custom Page Break Blot ---
     const BlockEmbed = Quill.import('blots/block/embed');
@@ -472,41 +527,82 @@
             maxStack: 100,
             userOnly: true
           },
-          toolbar: {
-            container: [
-              [{ 'header': [1, 2, 3, false] }],
-              ['bold', 'italic', 'underline', 'blockquote'],
-              [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-              [{ 'align': [] }],
-              ['clean']
-            ]
-          }
+          toolbar: false 
         },
         placeholder: 'Compose your sermon manuscript...'
       });
 
-      // Custom Toolbar Actions
-      const toolbar = quill.getModule('toolbar').container;
-      const customGroup = document.createElement('span');
-      customGroup.className = 'ql-formats border-l border-slate-300 pl-2 ml-2 flex items-center gap-1 flex-wrap';
+      // Hide toolbar instantly when typing starts
+      quill.on('text-change', (delta, oldDelta, source) => {
+        if (source === 'user') {
+          isTyping = true;
+          document.getElementById('floating-toolbar').style.display = 'none';
+          
+          clearTimeout(typingTimer);
+          typingTimer = setTimeout(() => {
+            isTyping = false;
+          }, 400); // Resume click-to-show responsiveness shortly after typing pauses
+        }
+      });
 
-      customGroup.innerHTML = `
-        <button type="button" id="btn-undo" class="!w-auto !px-1.5 text-xs font-semibold" title="Undo">↩ Undo</button>
-        <button type="button" id="btn-redo" class="!w-auto !px-1.5 text-xs font-semibold" title="Redo">↪ Redo</button>
-        <button type="button" id="btn-verse" class="!w-auto !px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-xs font-bold" title="Fetch Scripture at Cursor">📖 Fetch Verse</button>
-        <button type="button" id="btn-nextpage" class="!w-auto !px-2 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded text-xs font-bold" title="Insert Page Break">📄 Page Break</button>
-      `;
+      // Show floating toolbar when clicking/tapping at cursor position (if not typing)
+      quill.on('selection-change', (range) => {
+        const toolbar = document.getElementById('floating-toolbar');
+        const workspaceArea = document.getElementById('editor-workspace-area');
 
-      toolbar.appendChild(customGroup);
+        if (!range || isTyping) {
+          toolbar.style.display = 'none';
+          return;
+        }
 
-      document.getElementById('btn-undo').addEventListener('click', () => quill.history.undo());
-      document.getElementById('btn-redo').addEventListener('click', () => quill.history.redo());
-      document.getElementById('btn-verse').addEventListener('click', openVerseModal);
-      document.getElementById('btn-nextpage').addEventListener('click', insertPageBreak);
+        const bounds = quill.getBounds(range.index, range.length || 0);
+        const editorEl = document.getElementById('editor-container');
+        const editorRect = editorEl.getBoundingClientRect();
+        const workspaceRect = workspaceArea.getBoundingClientRect();
+
+        let topPos = (editorRect.top - workspaceRect.top) + workspaceArea.scrollTop + bounds.top - 10;
+        let leftPos = (editorRect.left - workspaceRect.left) + bounds.left + bounds.width + 15;
+
+        if (bounds.left > 500) {
+          leftPos = (editorRect.left - workspaceRect.left) + bounds.left - 190;
+        }
+
+        toolbar.style.top = `${topPos}px`;
+        toolbar.style.left = `${leftPos}px`;
+        toolbar.style.transform = 'none';
+        toolbar.style.display = 'flex';
+      });
 
       // Initialize with one default passage field
       addPassageField();
     });
+
+    // --- Formatting helpers for vertical floating toolbar ---
+    window.formatText = (formatName) => {
+      const range = quill.getSelection();
+      if (range) {
+        const currentFormat = quill.getFormat(range);
+        quill.format(formatName, !currentFormat[formatName]);
+      }
+    };
+
+    window.formatHeader = (level) => {
+      const range = quill.getSelection();
+      if (range) {
+        const currentFormat = quill.getFormat(range);
+        const newVal = currentFormat.header === level ? false : level;
+        quill.format('header', newVal);
+      }
+    };
+
+    window.formatList = (listType) => {
+      const range = quill.getSelection();
+      if (range) {
+        const currentFormat = quill.getFormat(range);
+        const newVal = currentFormat.list === listType ? false : listType;
+        quill.format('list', newVal);
+      }
+    };
 
     // --- Dynamic Key Scriptures Handlers ---
     window.addPassageField = (initialValue = "") => {
@@ -541,7 +637,6 @@
       if (el && container.children.length > 1) {
         el.remove();
       } else if (el) {
-        // Clear input if it's the last remaining row
         el.querySelector('input').value = "";
       }
     };
@@ -866,11 +961,11 @@
     };
 
     // --- Next Page / Page Break Embed ---
-    function insertPageBreak() {
+    window.insertPageBreak = () => {
       const range = quill.getSelection(true) || { index: quill.getLength() };
       quill.insertEmbed(range.index, 'pageBreak', true, Quill.sources.USER);
       quill.setSelection(range.index + 1, Quill.sources.SILENT);
-    }
+    };
 
     // --- Firestore Sync Handlers ---
     function listenToSermons(uid) {
@@ -1052,7 +1147,9 @@
       }
     };
 
-    // --- Render Published Booklet View ---
+    // --- Render Published Booklet View with Tap-to-Next-Page Support ---
+    let activeBookletPageIndex = 0;
+
     function renderBooklet() {
       const theme = document.getElementById('sermon-theme').value || "Untitled Theme";
       const passages = getKeyPassagesArray();
@@ -1061,21 +1158,27 @@
       const venue = document.getElementById('sermon-venue').value || "";
 
       const htmlContent = quill.getSemanticHTML();
+      const pageSections = htmlContent.split(/<div class="page-break"[^>]*><\/div>/gi);
+      
       const pagesContainer = document.getElementById('booklet-pages-container');
       pagesContainer.innerHTML = "";
 
-      const pageSections = htmlContent.split(/<div class="page-break"[^>]*><\/div>/gi);
+      if (activeBookletPageIndex >= pageSections.length) {
+        activeBookletPageIndex = 0;
+      }
 
       pageSections.forEach((sectionHtml, index) => {
         const pageNum = index + 1;
+        const isVisible = index === activeBookletPageIndex;
+
         const pageDiv = document.createElement('div');
-        pageDiv.className = "bg-amber-50 p-6 sm:p-8 rounded-lg shadow-md border border-amber-200 flex flex-col justify-between text-slate-900 min-h-[500px] sm:min-h-[550px] page-break-print";
+        pageDiv.className = `bg-amber-50 p-6 sm:p-8 rounded-lg shadow-md border border-amber-200 flex flex-col justify-between text-slate-900 min-h-[500px] sm:min-h-[550px] page-break-print transition-all duration-300 ${isVisible ? 'block' : 'hidden'}`;
 
         pageDiv.innerHTML = `
           <div>
             ${pageNum === 1 ? `
               <div class="border-b-2 border-amber-300 pb-4 mb-6">
-                <span class="text-xs font-bold tracking-widest text-indigo-700 uppercase">Sermon Booklet</span>
+                <span class="text-xs font-bold tracking-widest text-indigo-700 uppercase">Sermon Booklet (Tap page to advance ➔)</span>
                 <h1 class="text-2xl sm:text-3xl font-serif font-bold text-slate-900 mt-1">${escapeHtml(theme)}</h1>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 pt-3 border-t border-amber-200/60 text-xs font-serif text-amber-900">
@@ -1094,8 +1197,8 @@
               </div>
             ` : `
               <div class="border-b border-amber-200 pb-2 mb-4 flex justify-between items-center text-xs text-amber-800 font-serif">
-                <span>${escapeHtml(theme)} ${speaker ? '— ' + escapeHtml(speaker) : ''}</span>
-                <span>Page ${pageNum}</span>
+                <span>${escapeHtml(theme)}${speaker ? '— ' + escapeHtml(speaker) : ''}</span>
+                <span>Page ${pageNum} (Tap page to advance ➔)</span>
               </div>
             `}
             <div class="prose prose-amber font-serif text-slate-800 text-xs sm:text-sm leading-relaxed">
@@ -1111,9 +1214,24 @@
       });
     }
 
+    window.handleBookletTap = (e) => {
+      const htmlContent = quill.getSemanticHTML();
+      const pageSections = htmlContent.split(/<div class="page-break"[^>]*><\/div>/gi);
+      if (pageSections.length <= 1) return;
+
+      activeBookletPageIndex = (activeBookletPageIndex + 1) % pageSections.length;
+      renderBooklet();
+    };
+
     window.printBooklet = () => {
       switchTab('booklet');
-      setTimeout(() => window.print(), 300);
+      const pagesContainer = document.getElementById('booklet-pages-container');
+      Array.from(pagesContainer.children).forEach(child => child.classList.remove('hidden'));
+      
+      setTimeout(() => {
+        window.print();
+        renderBooklet();
+      }, 300);
     };
 
     function escapeHtml(str) {
