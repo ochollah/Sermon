@@ -101,6 +101,12 @@
       }
     }
   </style>
+
+  <!-- Global Fallbacks to prevent ReferenceErrors during early loading -->
+  <script>
+    window.login = window.login || function() { alert("Connecting to Google Auth... Please wait a second."); };
+    window.logout = window.logout || function() {};
+  </script>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen">
 
@@ -115,10 +121,10 @@
 
     <main class="text-center max-w-3xl mx-auto my-12 sm:my-16 px-2">
       <h2 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight text-white">
-        Craft & Publish Complete Sermons with Multiple Key Scriptures, Lyrics & Prayers
+        Craft, Stream & Publish Complete Sermons with Video & Scripture
       </h2>
       <p class="text-slate-400 text-base sm:text-lg mb-8">
-        Full rich-text sermon drafting featuring click-to-show vertical cursor toolbar, live Bible API lookup, song lyrics, prayer points, illustrations, and interactive booklet publishing.
+        Full rich-text sermon drafting featuring click-to-show vertical cursor toolbar, sticky YouTube video streaming with anti-forwarding protection, live Bible API lookup, song lyrics, and interactive booklet publishing.
       </p>
       <button onclick="login()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-semibold text-lg transition shadow-lg">
         Get Started Free
@@ -137,7 +143,7 @@
     <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="hidden sidebar-overlay"></div>
 
     <!-- Sidebar / User Sermons Dashboard -->
-    <aside id="sidebar-drawer" class="w-72 lg:w-80 bg-slate-900 text-white flex flex-col justify-between border-r border-slate-800 sidebar-drawer lg:static lg:transform-none h-full">
+    <aside id="sidebar-drawer" class="w-72 lg:w-80 bg-slate-900 text-white flex flex-col justify-between border-r border-slate-800 sidebar-drawer lg:static lg:transform-none h-full flex-shrink-0">
       <div class="p-4 overflow-y-auto">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-xl font-bold text-indigo-400 cursor-pointer" onclick="showView('landing')">SermonCraft</h2>
@@ -166,10 +172,10 @@
     </aside>
 
     <!-- Main Workspace -->
-    <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <main class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
       
-      <!-- Top Navigation Bar -->
-      <header class="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 flex justify-between items-center gap-2">
+      <!-- Top Navigation Bar (FIXED HEADER) -->
+      <header class="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 flex justify-between items-center gap-2 z-30 flex-shrink-0">
         <div class="flex items-center gap-2">
           <button onclick="toggleSidebar()" class="p-2 rounded-md text-slate-600 hover:bg-slate-100 focus:outline-none" title="Toggle Sidebar">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -180,7 +186,7 @@
               Editor
             </button>
             <button id="btn-booklet-tab" onclick="switchTab('booklet')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
-              Booklet Preview
+              Booklet & Stream Preview
             </button>
           </div>
         </div>
@@ -198,7 +204,22 @@
         </div>
       </header>
 
-      <!-- Dynamic Content Workspace -->
+      <!-- FIXED VIDEO STREAM PLAYER CONTAINER BELOW TOP BAR -->
+      <div id="sticky-video-banner" class="hidden bg-slate-950 border-b border-slate-800 p-2 sm:p-3 shadow-md z-20 flex-shrink-0">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div class="w-full sm:w-80 h-44 sm:h-48 relative bg-black rounded-lg overflow-hidden flex-shrink-0 shadow">
+            <div id="yt-sticky-player"></div>
+          </div>
+          <div class="flex-1 text-slate-300 text-xs flex flex-col justify-center">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              <span class="font-bold text-rose-400 uppercase tracking-wider text-[11px]">Active Sermon Video Stream</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic Scrollable Content Workspace -->
       <div id="editor-workspace-area" class="flex-1 p-3 sm:p-6 overflow-y-auto relative">
         
         <!-- COMPACT VERTICAL FLOATING CURSOR TOOLBAR -->
@@ -272,6 +293,22 @@
             </div>
           </div>
 
+          <!-- YouTube Video Link Input Section -->
+          <div class="bg-rose-50/60 p-3 sm:p-4 rounded-lg border border-rose-200">
+            <label class="block text-xs font-semibold uppercase text-rose-900 mb-1">YouTube Sermon Video / Live Stream Link</label>
+            <div class="flex gap-2">
+              <input 
+                type="text" 
+                id="sermon-youtube-url" 
+                placeholder="e.g., https://www.youtube.com/watch?v=XXXXXXXXXXX" 
+                class="flex-1 text-sm border border-slate-300 rounded-md p-2 focus:outline-none focus:border-indigo-600 bg-white"
+              />
+              <button onclick="applyAndLoadVideo()" class="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-2 rounded-md text-xs font-bold transition">
+                Set Video
+              </button>
+            </div>
+          </div>
+
           <!-- Speaker, Date, and Venue Metadata -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
             <div>
@@ -334,12 +371,12 @@
           </div>
         </div>
 
-        <!-- BOOKLET PUBLISHED VIEW TAB -->
+        <!-- BOOKLET & STREAM PUBLISHED VIEW TAB -->
         <div id="tab-booklet" class="hidden max-w-4xl mx-auto">
           <div class="flex justify-between items-center mb-4">
             <div>
               <h3 class="text-xl font-bold text-slate-800">Published Booklet View</h3>
-              <p class="text-xs text-slate-500">Tap anywhere on the booklet page below to flip to the next page.</p>
+              <p class="text-xs text-slate-500">Tap booklet pages below to turn pages while listening to the video stream above.</p>
             </div>
             <button onclick="printBooklet()" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Print Booklet</button>
           </div>
@@ -466,6 +503,9 @@
     </div>
   </div>
 
+  <!-- YouTube IFrame Player API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
   <!-- Quill.js Library -->
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 
@@ -501,6 +541,151 @@
     let quill = null;
     let isTyping = false;
     let typingTimer = null;
+
+    // --- YouTube Anti-Forwarding Streaming State ---
+    let ytStickyPlayer = null;
+    let currentLoadedVideoId = null;
+    let maxTimeWatched = 0;
+    let antiForwardTimer = null;
+
+    function extractYouTubeId(url) {
+      if (!url) return null;
+      let videoId = null;
+      try {
+        const parsedUrl = new URL(url.trim());
+        if (parsedUrl.hostname === 'youtu.be') {
+          videoId = parsedUrl.pathname.slice(1);
+        } else if (parsedUrl.hostname.includes('youtube.com')) {
+          videoId = parsedUrl.searchParams.get('v');
+          if (!videoId && parsedUrl.pathname.startsWith('/embed/')) {
+            videoId = parsedUrl.pathname.split('/')[2];
+          } else if (!videoId && parsedUrl.pathname.startsWith('/live/')) {
+            videoId = parsedUrl.pathname.split('/')[2];
+          }
+        }
+      } catch (e) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        videoId = (match && match[2].length === 11) ? match[2] : null;
+      }
+      return (videoId && videoId.length === 11) ? videoId : null;
+    }
+
+    window.applyAndLoadVideo = function() {
+      const urlInput = document.getElementById('sermon-youtube-url').value.trim();
+      const videoId = extractYouTubeId(urlInput);
+
+      if (!urlInput) {
+        hideStickyVideoBanner();
+        return;
+      }
+
+      if (!videoId) {
+        alert("Invalid YouTube URL format. Please enter a valid YouTube video link.");
+        hideStickyVideoBanner();
+        return;
+      }
+
+      updateStickyYouTubePlayer(videoId);
+    };
+
+    function hideStickyVideoBanner() {
+      const banner = document.getElementById('sticky-video-banner');
+      banner.classList.add('hidden');
+      if (ytStickyPlayer && typeof ytStickyPlayer.destroy === 'function') {
+        ytStickyPlayer.destroy();
+        ytStickyPlayer = null;
+      }
+      currentLoadedVideoId = null;
+      maxTimeWatched = 0;
+      if (antiForwardTimer) clearInterval(antiForwardTimer);
+    }
+
+    function updateStickyYouTubePlayer(videoId) {
+      const banner = document.getElementById('sticky-video-banner');
+      banner.classList.remove('hidden');
+
+      // If same video is already playing, do nothing
+      if (currentLoadedVideoId === videoId && ytStickyPlayer) {
+        return;
+      }
+
+      currentLoadedVideoId = videoId;
+      maxTimeWatched = 0;
+
+      // Always destroy existing player to ensure fresh video loading
+      if (ytStickyPlayer && typeof ytStickyPlayer.destroy === 'function') {
+        ytStickyPlayer.destroy();
+        ytStickyPlayer = null;
+      }
+
+      // Re-create DOM placeholder element for fresh initialization
+      const wrapper = document.querySelector('#sticky-video-banner .w-full');
+      wrapper.innerHTML = '<div id="yt-sticky-player"></div>';
+
+      initYTPlayer('yt-sticky-player', videoId, (playerInstance) => {
+        ytStickyPlayer = playerInstance;
+      });
+    }
+
+    function initYTPlayer(containerId, videoId, callback) {
+      if (window.YT && window.YT.Player) {
+        createPlayerInstance(containerId, videoId, callback);
+      } else {
+        window.onYouTubeIframeAPIReady = function() {
+          createPlayerInstance(containerId, videoId, callback);
+        };
+      }
+    }
+
+    function createPlayerInstance(containerId, videoId, callback) {
+      const player = new YT.Player(containerId, {
+        height: '100%',
+        width: '100%',
+        videoId: videoId,
+        playerVars: {
+          'playsinline': 1,
+          'controls': 1,
+          'disablekb': 1,
+          'modestbranding': 1
+        },
+        events: {
+          'onReady': (event) => {
+            maxTimeWatched = 0;
+            if (callback) callback(event.target);
+            startAntiForwardProtection(event.target);
+          },
+          'onStateChange': (event) => {
+            if (event.data === YT.PlayerState.PLAYING) {
+              startAntiForwardProtection(event.target);
+            }
+          }
+        }
+      });
+    }
+
+    function startAntiForwardProtection(playerInstance) {
+      if (antiForwardTimer) clearInterval(antiForwardTimer);
+      
+      antiForwardTimer = setInterval(() => {
+        if (!playerInstance || typeof playerInstance.getCurrentTime !== 'function') return;
+        try {
+          const currentTime = playerInstance.getCurrentTime();
+          const state = playerInstance.getPlayerState();
+          
+          if (state === YT.PlayerState.PLAYING) {
+            if (currentTime > maxTimeWatched + 1.5) {
+              // User attempted to forward/seek ahead! Snap back instantly
+              playerInstance.seekTo(maxTimeWatched, true);
+            } else {
+              maxTimeWatched = Math.max(maxTimeWatched, currentTime);
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 500);
+    }
 
     // --- Quill Custom Page Break Blot ---
     const BlockEmbed = Quill.import('blots/block/embed');
@@ -541,11 +726,11 @@
           clearTimeout(typingTimer);
           typingTimer = setTimeout(() => {
             isTyping = false;
-          }, 400); // Resume click-to-show responsiveness shortly after typing pauses
+          }, 400);
         }
       });
 
-      // Show floating toolbar when clicking/tapping at cursor position (if not typing)
+      // Show floating toolbar when clicking/tapping at cursor position
       quill.on('selection-change', (range) => {
         const toolbar = document.getElementById('floating-toolbar');
         const workspaceArea = document.getElementById('editor-workspace-area');
@@ -573,7 +758,6 @@
         toolbar.style.display = 'flex';
       });
 
-      // Initialize with one default passage field
       addPassageField();
     });
 
@@ -1032,6 +1216,8 @@
       currentSermonId = null;
       document.getElementById('sermon-theme').value = "";
       setKeyPassagesArray([]);
+      document.getElementById('sermon-youtube-url').value = "";
+      hideStickyVideoBanner();
       document.getElementById('sermon-speaker').value = "";
       document.getElementById('sermon-date').value = "";
       document.getElementById('sermon-venue').value = "";
@@ -1054,6 +1240,14 @@
         : (sermon.passage ? [sermon.passage] : []);
       setKeyPassagesArray(passages);
 
+      const ytUrl = sermon.youtubeUrl || "";
+      document.getElementById('sermon-youtube-url').value = ytUrl;
+      if (ytUrl) {
+        applyAndLoadVideo();
+      } else {
+        hideStickyVideoBanner();
+      }
+
       document.getElementById('sermon-speaker').value = sermon.speaker || "";
       document.getElementById('sermon-date').value = sermon.date || "";
       document.getElementById('sermon-venue').value = sermon.venue || "";
@@ -1075,6 +1269,7 @@
       
       const theme = document.getElementById('sermon-theme').value.trim();
       const passages = getKeyPassagesArray();
+      const youtubeUrl = document.getElementById('sermon-youtube-url').value.trim();
       const speaker = document.getElementById('sermon-speaker').value.trim();
       const date = document.getElementById('sermon-date').value;
       const venue = document.getElementById('sermon-venue').value.trim();
@@ -1092,6 +1287,7 @@
         const sermonPayload = {
           theme: theme || "Untitled Theme",
           passages: passages,
+          youtubeUrl: youtubeUrl,
           speaker: speaker || "",
           date: date || "",
           venue: venue || "",
@@ -1108,6 +1304,8 @@
           const docRef = await addDoc(collection(db, "users", currentUser.uid, "sermons"), sermonPayload);
           currentSermonId = docRef.id;
         }
+        
+        applyAndLoadVideo();
         updateDeleteButtonVisibility();
       } catch (err) {
         console.error("Firestore Publish Error:", err);
