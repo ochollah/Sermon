@@ -6,6 +6,7 @@
   <title>SermonCraft - Smart Quill Editor & Booklet Publisher</title>
   
   <!-- Tailwind CSS -->
+  <!-- Note for Production: For production deployment, install Tailwind CSS via CLI or PostCSS as per https://tailwindcss.com/docs/installation -->
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Quill.js Theme & Stylesheet -->
@@ -124,7 +125,7 @@
         Craft, Stream & Publish Complete Sermons with Video & Scripture
       </h2>
       <p class="text-slate-400 text-base sm:text-lg mb-8">
-        Full rich-text sermon drafting featuring click-to-show vertical cursor toolbar, sticky YouTube video streaming with anti-forwarding protection, live Bible API lookup, song lyrics, and interactive booklet publishing.
+        Full rich-text sermon drafting featuring click-to-show vertical cursor toolbar, sticky YouTube video streaming with free scrubbing/forwarding, live Bible API lookup, song lyrics, and interactive booklet publishing.
       </p>
       <button onclick="login()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-semibold text-lg transition shadow-lg">
         Get Started Free
@@ -204,17 +205,18 @@
         </div>
       </header>
 
-      <!-- FIXED VIDEO STREAM PLAYER CONTAINER BELOW TOP BAR -->
-      <div id="sticky-video-banner" class="hidden bg-slate-950 border-b border-slate-800 p-2 sm:p-3 shadow-md z-20 flex-shrink-0">
-        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div class="w-full sm:w-80 h-44 sm:h-48 relative bg-black rounded-lg overflow-hidden flex-shrink-0 shadow">
-            <div id="yt-sticky-player"></div>
+      <!-- FIXED SLIM VIDEO STREAM PLAYER CONTAINER (NO AWAKWARD SPAN THICKNESS) -->
+      <div id="sticky-video-banner" class="hidden bg-slate-950 border-b border-slate-800 p-1 px-3 shadow-md z-20 flex-shrink-0">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row gap-2 items-center justify-between">
+          <div class="w-full sm:w-56 h-28 sm:h-32 relative bg-black rounded overflow-hidden flex-shrink-0 shadow video-wrapper">
+            <!-- Fast loading responsive iframe inserted dynamically -->
           </div>
           <div class="flex-1 text-slate-300 text-xs flex flex-col justify-center">
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center gap-2 mb-0.5">
               <span class="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
               <span class="font-bold text-rose-400 uppercase tracking-wider text-[11px]">Active Sermon Video Stream</span>
             </div>
+            <p class="text-[11px] text-slate-400">Full playback enabled. Scrub and forward freely while writing.</p>
           </div>
         </div>
       </div>
@@ -222,11 +224,17 @@
       <!-- Dynamic Scrollable Content Workspace -->
       <div id="editor-workspace-area" class="flex-1 p-3 sm:p-6 overflow-y-auto relative">
         
-        <!-- COMPACT VERTICAL FLOATING CURSOR TOOLBAR -->
+        <!-- COMPACT VERTICAL FLOATING CURSOR TOOLBAR WITH UNDO/REDO -->
         <div id="floating-toolbar" class="bg-slate-900/95 text-white p-1.5 rounded-xl flex flex-col gap-1 border border-slate-700 text-xs font-medium w-44 shadow-2xl">
           <div class="text-[10px] uppercase tracking-wider text-slate-400 px-1.5 pt-0.5 font-bold border-b border-slate-800 pb-1 flex justify-between items-center">
             <span>Quick Toolbar</span>
             <span class="text-indigo-400">⚡ At Cursor</span>
+          </div>
+
+          <!-- Undo / Redo Group -->
+          <div class="grid grid-cols-2 gap-1">
+            <button type="button" onclick="quillUndo()" class="py-1 bg-slate-800 hover:bg-slate-700 rounded text-center text-[11px]" title="Undo">↩ Undo</button>
+            <button type="button" onclick="quillRedo()" class="py-1 bg-slate-800 hover:bg-slate-700 rounded text-center text-[11px]" title="Redo">Redo ↪</button>
           </div>
 
           <!-- Text Style Group -->
@@ -503,9 +511,6 @@
     </div>
   </div>
 
-  <!-- YouTube IFrame Player API -->
-  <script src="https://www.youtube.com/iframe_api"></script>
-
   <!-- Quill.js Library -->
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 
@@ -541,12 +546,6 @@
     let quill = null;
     let isTyping = false;
     let typingTimer = null;
-
-    // --- YouTube Anti-Forwarding Streaming State ---
-    let ytStickyPlayer = null;
-    let currentLoadedVideoId = null;
-    let maxTimeWatched = 0;
-    let antiForwardTimer = null;
 
     function extractYouTubeId(url) {
       if (!url) return null;
@@ -592,99 +591,19 @@
     function hideStickyVideoBanner() {
       const banner = document.getElementById('sticky-video-banner');
       banner.classList.add('hidden');
-      if (ytStickyPlayer && typeof ytStickyPlayer.destroy === 'function') {
-        ytStickyPlayer.destroy();
-        ytStickyPlayer = null;
-      }
-      currentLoadedVideoId = null;
-      maxTimeWatched = 0;
-      if (antiForwardTimer) clearInterval(antiForwardTimer);
+      const wrapper = document.querySelector('#sticky-video-banner .video-wrapper');
+      if (wrapper) wrapper.innerHTML = "";
     }
 
     function updateStickyYouTubePlayer(videoId) {
       const banner = document.getElementById('sticky-video-banner');
       banner.classList.remove('hidden');
 
-      // If same video is already playing, do nothing
-      if (currentLoadedVideoId === videoId && ytStickyPlayer) {
-        return;
+      const wrapper = document.querySelector('#sticky-video-banner .video-wrapper');
+      if (wrapper) {
+        // Fast iframe load with full playback, scrubbing, and forwarding enabled
+        wrapper.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?playsinline=1&enablejsapi=1" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
       }
-
-      currentLoadedVideoId = videoId;
-      maxTimeWatched = 0;
-
-      // Always destroy existing player to ensure fresh video loading
-      if (ytStickyPlayer && typeof ytStickyPlayer.destroy === 'function') {
-        ytStickyPlayer.destroy();
-        ytStickyPlayer = null;
-      }
-
-      // Re-create DOM placeholder element for fresh initialization
-      const wrapper = document.querySelector('#sticky-video-banner .w-full');
-      wrapper.innerHTML = '<div id="yt-sticky-player"></div>';
-
-      initYTPlayer('yt-sticky-player', videoId, (playerInstance) => {
-        ytStickyPlayer = playerInstance;
-      });
-    }
-
-    function initYTPlayer(containerId, videoId, callback) {
-      if (window.YT && window.YT.Player) {
-        createPlayerInstance(containerId, videoId, callback);
-      } else {
-        window.onYouTubeIframeAPIReady = function() {
-          createPlayerInstance(containerId, videoId, callback);
-        };
-      }
-    }
-
-    function createPlayerInstance(containerId, videoId, callback) {
-      const player = new YT.Player(containerId, {
-        height: '100%',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-          'playsinline': 1,
-          'controls': 1,
-          'disablekb': 1,
-          'modestbranding': 1
-        },
-        events: {
-          'onReady': (event) => {
-            maxTimeWatched = 0;
-            if (callback) callback(event.target);
-            startAntiForwardProtection(event.target);
-          },
-          'onStateChange': (event) => {
-            if (event.data === YT.PlayerState.PLAYING) {
-              startAntiForwardProtection(event.target);
-            }
-          }
-        }
-      });
-    }
-
-    function startAntiForwardProtection(playerInstance) {
-      if (antiForwardTimer) clearInterval(antiForwardTimer);
-      
-      antiForwardTimer = setInterval(() => {
-        if (!playerInstance || typeof playerInstance.getCurrentTime !== 'function') return;
-        try {
-          const currentTime = playerInstance.getCurrentTime();
-          const state = playerInstance.getPlayerState();
-          
-          if (state === YT.PlayerState.PLAYING) {
-            if (currentTime > maxTimeWatched + 1.5) {
-              // User attempted to forward/seek ahead! Snap back instantly
-              playerInstance.seekTo(maxTimeWatched, true);
-            } else {
-              maxTimeWatched = Math.max(maxTimeWatched, currentTime);
-            }
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }, 500);
     }
 
     // --- Quill Custom Page Break Blot ---
@@ -762,6 +681,14 @@
     });
 
     // --- Formatting helpers for vertical floating toolbar ---
+    window.quillUndo = () => {
+      if (quill && quill.history) quill.history.undo();
+    };
+
+    window.quillRedo = () => {
+      if (quill && quill.history) quill.history.redo();
+    };
+
     window.formatText = (formatName) => {
       const range = quill.getSelection();
       if (range) {
@@ -1161,6 +1088,8 @@
       unsubscribeSermons = onSnapshot(q, (snapshot) => {
         sermonsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderSermonsList();
+      }, (error) => {
+        console.warn("Firestore offline mode or connection note:", error);
       });
     }
 
